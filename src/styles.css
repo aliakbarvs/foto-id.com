@@ -613,6 +613,99 @@ h1 {
   transform: translateY(-1px);
 }
 
+.result-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.reset-button {
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.reset-button:hover,
+.reset-button:focus-visible {
+  border-color: var(--green);
+  transform: translateY(-1px);
+}
+
+.download-toast {
+  margin: -4px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--soft);
+  border: 1px solid #d7e8db;
+  color: var(--green-dark);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.onboarding-strip {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(31, 122, 85, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(31, 122, 85, 0.08);
+  margin-bottom: 4px;
+}
+
+.onboarding-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.onboarding-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.onboarding-step-num {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--green);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.onboarding-dismiss {
+  align-self: end;
+  justify-self: start;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: var(--green-dark);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.onboarding-dismiss:hover,
+.onboarding-dismiss:focus-visible {
+  border-color: var(--green);
+  background: #eef8f3;
+}
+
 .comparison-card {
   border-radius: 8px;
   padding: 12px;
@@ -823,7 +916,16 @@ h1 {
     flex-direction: column;
   }
 
+  .result-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .download-button {
+    width: 100%;
+  }
+
+  .reset-button {
     width: 100%;
   }
 

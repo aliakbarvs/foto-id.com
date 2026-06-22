@@ -197,10 +197,17 @@ function App() {
   });
   const [comparisonValue, setComparisonValue] = useState(52);
   const [isDragging, setIsDragging] = useState(false);
+  const [isOnboarded, setIsOnboarded] = useState(true);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
   const objectUrlsRef = useRef<string[]>([]);
   const previewObjectUrlRef = useRef('');
   const runIdRef = useRef(0);
   const previewRunIdRef = useRef(0);
+
+  useEffect(() => {
+    const onboarded = window.localStorage.getItem('foto-id-onboarded') === 'true';
+    setIsOnboarded(onboarded);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -229,6 +236,23 @@ function App() {
 
     URL.revokeObjectURL(previewObjectUrlRef.current);
     previewObjectUrlRef.current = '';
+  }, []);
+
+  const dismissOnboarding = useCallback(() => {
+    window.localStorage.setItem('foto-id-onboarded', 'true');
+    setIsOnboarded(true);
+  }, []);
+
+  const resetState = useCallback(() => {
+    setImageState(null);
+    setProcessingState('idle');
+    setProgress({ label: 'Menunggu foto', value: 0 });
+    setPreviewComposition({ status: 'idle', url: '', errorMessage: '' });
+    setErrorMessage('');
+    setDownloadError('');
+    setDownloadSuccess(false);
+    setComparisonValue(52);
+    setSelectedBackgroundId('transparent');
   }, []);
 
   const selectedBackground =
@@ -310,6 +334,7 @@ function App() {
       setProgress({ label: 'Gagal divalidasi', value: 0 });
       setProcessingState('error');
       setErrorMessage(validationMessage);
+      setDownloadSuccess(false);
       return;
     }
 
@@ -324,6 +349,7 @@ function App() {
     setImageState(null);
     setSelectedBackgroundId('transparent');
     setComparisonValue(52);
+    setDownloadSuccess(false);
     setProcessingState('loading');
     setProgress({ label: 'Membaca foto', value: 8 });
 
@@ -412,6 +438,7 @@ function App() {
 
     event.preventDefault();
     setDownloadError('');
+    setDownloadSuccess(false);
 
     try {
       const blob = await composePngBlob(imageState.resultUrl, selectedPresetSpec.id, selectedBackground);
@@ -421,6 +448,8 @@ function App() {
       link.download = composedDownloadName;
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setDownloadSuccess(true);
+      window.setTimeout(() => setDownloadSuccess(false), 4000);
     } catch {
       setDownloadError('PNG belum bisa disusun. Coba ulangi unduhan atau proses foto kembali.');
     }
@@ -459,6 +488,30 @@ function App() {
 
       <section className="workspace" aria-label="Wizard pasfoto Foto-ID">
         <div className="tool-panel">
+          {!isOnboarded ? (
+            <div className="onboarding-strip" role="note" aria-label="Panduan pertama">
+              <div className="onboarding-steps">
+                <span className="onboarding-step">
+                  <span className="onboarding-step-num" aria-hidden="true">1</span>
+                  <span>Upload atau tarik foto ke sini</span>
+                </span>
+                <span className="onboarding-step" aria-hidden="true">→</span>
+                <span className="onboarding-step">
+                  <span className="onboarding-step-num" aria-hidden="true">2</span>
+                  <span>Pilih kebutuhan pasfoto</span>
+                </span>
+                <span className="onboarding-step" aria-hidden="true">→</span>
+                <span className="onboarding-step">
+                  <span className="onboarding-step-num" aria-hidden="true">3</span>
+                  <span>Unduh PNG hasil</span>
+                </span>
+              </div>
+              <button type="button" className="onboarding-dismiss" onClick={dismissOnboarding}>
+                Mengerti
+              </button>
+            </div>
+          ) : null}
+
           <label
             className={`dropzone${isDragging ? ' is-dragging' : ''}${isLoading ? ' is-loading' : ''}`}
             htmlFor={fileInputId}
@@ -476,10 +529,21 @@ function App() {
             <span className="dropzone-mark" aria-hidden="true">
               +
             </span>
-            <span className="dropzone-title">Upload foto wajah atau produk</span>
-            <span id="file-help" className="dropzone-help">
-              Pilih foto atau tarik ke sini. JPG, PNG, atau WebP. Maksimal {formatFileSize(MAX_FILE_SIZE)}.
-            </span>
+            {!imageState && !isLoading ? (
+              <>
+                <span className="dropzone-title">Tarif foto di sini untuk mulai</span>
+                <span id="file-help" className="dropzone-help">
+                  Pilih foto atau tarik ke sini. JPG, PNG, atau WebP. Maksimal {formatFileSize(MAX_FILE_SIZE)}.
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="dropzone-title">Ganti foto</span>
+                <span id="file-help" className="dropzone-help">
+                  Klik atau tarik foto lain untuk mengganti.
+                </span>
+              </>
+            )}
           </label>
 
           <section className="preset-card" aria-labelledby="preset-title">
@@ -516,7 +580,7 @@ function App() {
               <div className="progress-track" aria-hidden="true">
                 <span style={{ width: `${progress.value}%` }} />
               </div>
-              <p>Jangan tutup tab ini. Model AI mungkin perlu dimuat saat pemakaian pertama.</p>
+              <p>AI berjalan lokal di browser. Jangan tutup tab ini.</p>
             </div>
           ) : null}
 
@@ -588,19 +652,29 @@ function App() {
                     {selectedBackground.label}
                   </p>
                 </div>
-                <a
-                  className="download-button"
-                  href={imageState.resultUrl}
-                  download={composedDownloadName}
-                  onClick={handleDownload}
-                >
-                  Unduh PNG {selectedBackground.downloadLabel} {selectedPreset.label}
-                </a>
+                <div className="result-actions">
+                  <a
+                    className="download-button"
+                    href={imageState.resultUrl}
+                    download={composedDownloadName}
+                    onClick={handleDownload}
+                  >
+                    Unduh PNG {selectedBackground.downloadLabel} {selectedPreset.label}
+                  </a>
+                  <button type="button" className="reset-button" onClick={resetState}>
+                    Foto baru
+                  </button>
+                </div>
               </div>
               {downloadError ? (
                 <p className="download-error" role="alert">
                   {downloadError}
                 </p>
+              ) : null}
+              {downloadSuccess ? (
+                <div className="download-toast" role="status" aria-live="polite">
+                  Unduhan berhasil. PNG penuh, tanpa watermark.
+                </div>
               ) : null}
 
               <div className="comparison-card">
