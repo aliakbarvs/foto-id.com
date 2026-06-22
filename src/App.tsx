@@ -99,7 +99,19 @@ const progressLabel = (key: string) => {
   }
 
   if (normalizedKey.includes('segment') || normalizedKey.includes('infer')) {
-    return 'Memisahkan subjek dari latar';
+    return 'AI memproses foto';
+  }
+
+  if (normalizedKey.includes('decode')) {
+    return 'Membaca foto';
+  }
+
+  if (normalizedKey.includes('encode')) {
+    return 'Menyusun hasil';
+  }
+
+  if (normalizedKey.includes('upscale')) {
+    return 'Meningkatkan kualitas';
   }
 
   return 'Memproses foto';
@@ -174,19 +186,26 @@ const composePngBlob = async (
     throw new Error('Canvas context unavailable');
   }
 
-  outputContext.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
-
-  if (background.id !== 'transparent') {
+  if (background.id === 'transparent') {
+    outputContext.clearRect(0, 0, plan.output.width, plan.output.height);
+  } else {
     outputContext.fillStyle = background.cssValue;
-    outputContext.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+    outputContext.fillRect(0, 0, plan.output.width, plan.output.height);
   }
+
+  const targetWidth = plan.drawImage.width;
+  const targetHeight = plan.drawImage.height;
 
   outputContext.drawImage(
     image,
     plan.drawImage.x,
     plan.drawImage.y,
-    plan.drawImage.width,
-    plan.drawImage.height
+    targetWidth,
+    targetHeight,
+    plan.drawImage.x,
+    plan.drawImage.y,
+    targetWidth,
+    targetHeight
   );
 
   return canvasToPngBlob(outputCanvas);
@@ -223,36 +242,10 @@ function App() {
 
   useEffect(() => {
     const onboarded = window.localStorage.getItem('foto-id-onboarded') === 'true';
-    setIsOnboarded(onboarded);
-  }, []);
 
-  useEffect(() => {
-    return () => {
-      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      if (previewObjectUrlRef.current) {
-        URL.revokeObjectURL(previewObjectUrlRef.current);
-      }
-    };
-  }, []);
-
-  const rememberObjectUrl = (blob: Blob) => {
-    const url = URL.createObjectURL(blob);
-    objectUrlsRef.current.push(url);
-    return url;
-  };
-
-  const clearObjectUrls = () => {
-    objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-    objectUrlsRef.current = [];
-  };
-
-  const clearPreviewObjectUrl = useCallback(() => {
-    if (!previewObjectUrlRef.current) {
-      return;
+    if (!onboarded) {
+      setIsOnboarded(false);
     }
-
-    URL.revokeObjectURL(previewObjectUrlRef.current);
-    previewObjectUrlRef.current = '';
   }, []);
 
   const dismissOnboarding = useCallback(() => {
@@ -260,86 +253,56 @@ function App() {
     setIsOnboarded(true);
   }, []);
 
+  const rememberObjectUrl = useCallback((blobOrFile: Blob | File) => {
+    const url = URL.createObjectURL(blobOrFile);
+    objectUrlsRef.current.push(url);
+    return url;
+  }, []);
+
+  const clearObjectUrls = useCallback(() => {
+    for (const url of objectUrlsRef.current) {
+      URL.revokeObjectURL(url);
+    }
+
+    objectUrlsRef.current = [];
+  }, []);
+
+  const clearPreviewObjectUrl = useCallback(() => {
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = '';
+    }
+  }, []);
+
   const resetState = useCallback(() => {
+    runIdRef.current += 1;
+    previewRunIdRef.current += 1;
+    clearObjectUrls();
+    clearPreviewObjectUrl();
+    setPreviewComposition({ status: 'idle', url: '', errorMessage: '' });
     setImageState(null);
     setProcessingState('idle');
     setProgress({ label: 'Menunggu foto', value: 0 });
-    setPreviewComposition({ status: 'idle', url: '', errorMessage: '' });
     setErrorMessage('');
     setDownloadError('');
     setDownloadSuccess(false);
-    setComparisonValue(52);
-    setSelectedBackgroundId('transparent');
-  }, []);
+    setUpscaleProgress({ label: '', value: 0 });
+    setUpscaleEnabled(false);
+  }, [clearObjectUrls, clearPreviewObjectUrl]);
 
-  const selectedBackground =
-    BACKGROUND_CHOICES.find((background) => background.id === selectedBackgroundId) ?? BACKGROUND_CHOICES[0];
-  const selectedPreset = SIZE_PRESETS.find((preset) => preset.id === selectedPresetId) ?? SIZE_PRESETS[1];
-  const selectedPresetSpec = getPresetSpec(selectedPresetId);
-  const exportDimensions = `${selectedPresetSpec.output.width} x ${selectedPresetSpec.output.height} px`;
-  const presetBehavior =
-    selectedPresetId === 'ecommerce'
-      ? 'auto crop objek, padding, dan center untuk katalog'
-      : 'auto crop subjek, center, dan headroom untuk foto resmi';
-  const composedDownloadName = imageState
-    ? createComposedDownloadName(imageState.fileName, selectedPresetSpec.id, selectedBackground.downloadLabel)
-    : '';
+  const processFile = useCallback(async (file: File) => {
+    const { size, type } = file;
+    const validationMessage = (() => {
+      if (!ACCEPTED_TYPES.includes(type)) {
+        return `Format tidak didukung: ${type}. Gunakan JPG, PNG, atau WebP.`;
+      }
 
-  useEffect(() => {
-    clearPreviewObjectUrl();
+      if (size > MAX_FILE_SIZE) {
+        return `Foto terlalu besar (${formatFileSize(size)}). Maksimal ${formatFileSize(MAX_FILE_SIZE)}.`;
+      }
 
-    if (!imageState || processingState !== 'ready') {
-      setPreviewComposition({ status: 'idle', url: '', errorMessage: '' });
-      return undefined;
-    }
-
-    const currentPreviewRunId = previewRunIdRef.current + 1;
-    previewRunIdRef.current = currentPreviewRunId;
-    let isActive = true;
-
-    setPreviewComposition({ status: 'loading', url: '', errorMessage: '' });
-
-    void composePngBlob(imageState.resultUrl, selectedPresetSpec.id, selectedBackground)
-      .then((blob) => {
-        if (!isActive || previewRunIdRef.current !== currentPreviewRunId) {
-          return;
-        }
-
-        const previewUrl = URL.createObjectURL(blob);
-        previewObjectUrlRef.current = previewUrl;
-        setPreviewComposition({ status: 'ready', url: previewUrl, errorMessage: '' });
-      })
-      .catch(() => {
-        if (!isActive || previewRunIdRef.current !== currentPreviewRunId) {
-          return;
-        }
-
-        setPreviewComposition({
-          status: 'error',
-          url: '',
-          errorMessage: 'Preview preset belum bisa disusun. Coba pilih preset lain atau proses ulang foto.'
-        });
-      });
-
-    return () => {
-      isActive = false;
-    };
-  }, [clearPreviewObjectUrl, imageState, processingState, selectedBackground, selectedPresetSpec.id]);
-
-  const validateImage = (file: File) => {
-    if (!ACCEPTED_TYPES.includes(file.type)) {
-      return 'Gunakan file gambar JPG, PNG, atau WebP.';
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      return `Ukuran foto maksimal ${formatFileSize(MAX_FILE_SIZE)}.`;
-    }
-
-    return '';
-  };
-
-  const processFile = async (file: File) => {
-    const validationMessage = validateImage(file);
+      return '';
+    })();
 
     if (validationMessage) {
       runIdRef.current += 1;
@@ -457,7 +420,7 @@ function App() {
         'Foto belum bisa diproses. Coba gambar lain, pastikan koneksi stabil saat model pertama kali dimuat, lalu ulangi.'
       );
     }
-  };
+  }, [upscaleEnabled, clearObjectUrls, clearPreviewObjectUrl, rememberObjectUrl]);
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const [file] = Array.from(event.target.files ?? []);
@@ -520,6 +483,14 @@ function App() {
   const hasResult = processingState === 'ready' && imageState;
   const hasComposedPreview = previewComposition.status === 'ready' && previewComposition.url;
 
+  const selectedPresetSpec = getPresetSpec(selectedPresetId);
+  const selectedBackground = BACKGROUND_CHOICES.find((b) => b.id === selectedBackgroundId)!;
+  const presetBehavior = selectedPresetSpec.kind === 'ecommerce' ? 'center' : 'crop';
+  const exportDimensions = selectedPresetSpec.kind === 'official'
+    ? `${selectedPresetSpec.output.width}×${selectedPresetSpec.output.height}`
+    : `disesuaikan`;
+  const composedDownloadName = imageState ? createComposedDownloadName(imageState.fileName, selectedPresetSpec.id, selectedBackground.downloadLabel) : '';
+
   return (
     <main className="app-shell">
       <section className="hero" aria-labelledby="hero-title">
@@ -559,12 +530,12 @@ function App() {
                 <span className="onboarding-step" aria-hidden="true">→</span>
                 <span className="onboarding-step">
                   <span className="onboarding-step-num" aria-hidden="true">2</span>
-                  <span>Pilih kebutuhan pasfoto</span>
+                  <span>Pilih ukuran dan background</span>
                 </span>
                 <span className="onboarding-step" aria-hidden="true">→</span>
                 <span className="onboarding-step">
                   <span className="onboarding-step-num" aria-hidden="true">3</span>
-                  <span>Unduh PNG hasil</span>
+                  <span>Unduh PNG tanpa watermark</span>
                 </span>
               </div>
               <button type="button" className="onboarding-dismiss" onClick={dismissOnboarding}>
@@ -628,59 +599,9 @@ function App() {
               ))}
             </div>
             <p className="preset-note">
-              Terpilih: {selectedPreset.label} - {presetBehavior}; ekspor {exportDimensions}.
+              Terpilih: {selectedPresetSpec.label} - {presetBehavior}; ekspor {exportDimensions}.
             </p>
           </section>
-
-          <section className="enhancer-card" aria-labelledby="enhancer-title">
-            <div className="section-heading">
-              <p className="mini-kicker">Peningkatan</p>
-              <h2 id="enhancer-title">Kualitas foto</h2>
-            </div>
-            <label className="enhancer-toggle" htmlFor="enhance-toggle">
-              <input
-                id="enhance-toggle"
-                type="checkbox"
-                checked={upscaleEnabled}
-                onChange={(event) => setUpscaleEnabled(event.target.checked)}
-              />
-              <span>Tingkatkan kualitas (2x)</span>
-            </label>
-            <p className="enhancer-note">
-              AI upscaler berjalan lokal di browser. Model akan diunduh sekali dan disimpan di perangkat Anda.
-            </p>
-            {upscaleEnabled && upscaleProgress.label ? (
-              <div className="status-card" role="status" aria-live="polite">
-                <div className="status-topline">
-                  <span>{upscaleProgress.label}</span>
-                  <span>{upscaleProgress.value}%</span>
-                </div>
-                <div className="progress-track" aria-hidden="true">
-                  <span style={{ width: `${upscaleProgress.value}%` }} />
-                </div>
-              </div>
-            ) : null}
-          </section>
-
-          {isLoading ? (
-            <div className="status-card" role="status" aria-live="polite">
-              <div className="status-topline">
-                <span>{progress.label}</span>
-                <span>{progress.value}%</span>
-              </div>
-              <div className="progress-track" aria-hidden="true">
-                <span style={{ width: `${progress.value}%` }} />
-              </div>
-              <p>AI berjalan lokal di browser. Jangan tutup tab ini.</p>
-            </div>
-          ) : null}
-
-          {processingState === 'error' ? (
-            <div className="error-card" role="alert">
-              <strong>Belum berhasil</strong>
-              <p>{errorMessage}</p>
-            </div>
-          ) : null}
 
           {hasResult ? (
             <section className="output-card" aria-labelledby="output-title">
@@ -688,8 +609,34 @@ function App() {
                 <p className="mini-kicker">Output</p>
                 <h2 id="output-title">Atur hasil PNG</h2>
               </div>
+              
+              <fieldset className="enhancer-fieldset" aria-labelledby="enhancer-label">
+                <legend id="enhancer-label" className="mini-kicker">Kualitas</legend>
+                <label className="enhancer-toggle" htmlFor="enhance-toggle">
+                  <input
+                    id="enhance-toggle"
+                    type="checkbox"
+                    checked={upscaleEnabled}
+                    onChange={(event) => setUpscaleEnabled(event.target.checked)}
+                  />
+                  <span className="enhancer-label-text">
+                    <strong>HD (2x upscale)</strong>
+                    <small>AI upscaler lokal</small>
+                  </span>
+                </label>
+                {upscaleProgress.label ? (
+                  <div className="enhancer-status" role="status" aria-live="polite">
+                    <span>{upscaleProgress.label}</span>
+                    <span>{upscaleProgress.value}%</span>
+                    <div className="enhancer-progress-track" aria-hidden="true">
+                      <span style={{ width: `${upscaleProgress.value}%` as string }} />
+                    </div>
+                  </div>
+                ) : null}
+              </fieldset>
+
               <fieldset className="background-control" aria-labelledby={backgroundLegendId}>
-                <legend id={backgroundLegendId}>Warna background</legend>
+                <legend className="mini-kicker" id={backgroundLegendId}>Warna background</legend>
                 <div className="background-options" role="radiogroup" aria-labelledby={backgroundLegendId}>
                   {BACKGROUND_CHOICES.map((background) => (
                     <label key={background.id} className="background-option">
@@ -711,6 +658,13 @@ function App() {
               </fieldset>
             </section>
           ) : null}
+
+          {processingState === 'error' ? (
+            <div className="error-card" role="alert">
+              <strong>Belum berhasil</strong>
+              <p>{errorMessage}</p>
+            </div>
+          ) : null}
         </div>
 
         <div className="preview-panel">
@@ -725,10 +679,28 @@ function App() {
           ) : null}
 
           {isLoading ? (
-            <div className="loading-preview" aria-hidden="true">
-              <div className="skeleton-image" />
-              <div className="skeleton-line" />
-              <div className="skeleton-line short" />
+            <div className="processing-overlay">
+              <div className="processing-card">
+                <div className="processing-animation">
+                  <div className="pulse-ring" />
+                  <div className="pulse-ring inner" />
+                  <span className="processing-icon">F</span>
+                </div>
+
+                <div className="processing-progress">
+                  <div className="progress-bar">
+                    <span style={{ width: `${progress.value}%` }} />
+                  </div>
+                  <div className="progress-label-row">
+                    <span className="progress-step-label">{progress.label}</span>
+                    <span className="progress-value">{progress.value}%</span>
+                  </div>
+                </div>
+
+                <p className="processing-note">
+                  AI berjalan lokal di browser. Jangan tutup tab ini.
+                </p>
+              </div>
             </div>
           ) : null}
 
@@ -739,7 +711,7 @@ function App() {
                   <p className="result-kicker">Hasil siap</p>
                   <h2>{imageState.fileName}</h2>
                   <p className="result-meta">
-                    Preset: {selectedPreset.label} - {presetBehavior}, ekspor {exportDimensions} · Background:{' '}
+                    Preset: {selectedPresetSpec.label} - {presetBehavior}, ekspor {exportDimensions} · Background:{' '}
                     {selectedBackground.label}
                   </p>
                 </div>
@@ -750,7 +722,7 @@ function App() {
                     download={composedDownloadName}
                     onClick={handleDownload}
                   >
-                    Unduh PNG {selectedBackground.downloadLabel} {selectedPreset.label}
+                    Unduh PNG {selectedBackground.downloadLabel} {selectedPresetSpec.label}
                   </a>
                   <button type="button" className="reset-button" onClick={resetState}>
                     Foto baru
