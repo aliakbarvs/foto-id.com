@@ -1,11 +1,24 @@
+declare module 'onnxruntime-web';
+
 type ProgressCallback = (progress: number) => void;
+
+type ORTSession = {
+  inputNames: string[];
+  outputNames: string[];
+  run: (feeds: Record<string, unknown>) => Promise<Record<string, { dims: number[]; data: Float32Array }>>;
+};
+
+type ORTTensor = {
+  dims: number[];
+  data: Float32Array;
+};
 
 const MODEL_URL = 'https://huggingface.co/xiongjie/lightweight-real-ESRGAN-anime/resolve/main/RealESRGAN_x4plus_anime_4B32F.onnx';
 const MODEL_CACHE_KEY = 'foto-id-realesrgan-model';
 
 export async function ensureUpscalerModel(
   onProgress?: ProgressCallback
-): Promise<unknown> {
+): Promise<ORTSession> {
   const cached = await getCachedModel();
   if (cached) {
     onProgress?.(100);
@@ -65,17 +78,13 @@ export async function ensureUpscalerModel(
   onProgress?.(95);
 
   try {
-    const ort = require('onnxruntime-web');
-    let session: unknown;
-    try {
-      session = await ort.InferenceSession.create(buffer, {
-        executionProviders: ['wasm']
-      });
-    } catch (sessionError) {
-      const detail = sessionError instanceof Error ? sessionError.message : String(sessionError);
-      console.error('[foto-id] upscaler session creation failed:', detail);
-      throw new Error(`Gagal memulai model AI: ${detail}`);
-    }
+    const ort = require('onnxruntime-web') as {
+      InferenceSession: new (buffer: ArrayBuffer, options?: { executionProviders?: string[] }) => ORTSession;
+      Tensor: new (type: string, data: Float32Array, dims: number[]) => ORTTensor;
+    };
+    const session = await new (ort.InferenceSession as any)(buffer, {
+      executionProviders: ['wasm']
+    });
 
     await cacheModel(buffer);
     onProgress?.(100);
@@ -90,7 +99,7 @@ export async function ensureUpscalerModel(
 
 export async function upscaleImage(
   imageBitmap: ImageBitmap,
-  session: unknown,
+  session: ORTSession,
   scale: number = 2
 ): Promise<ImageBitmap> {
   const sourceWidth = imageBitmap.width;
@@ -100,10 +109,10 @@ export async function upscaleImage(
   const targetHeight = sourceHeight * scale;
 
   const inputTensor = buildInputTensor(imageBitmap, targetWidth, targetHeight);
-  const feeds = { [(session as { inputNames: string[] }).inputNames[0]]: inputTensor };
+  const feeds = { [session.inputNames[0]]: inputTensor };
 
-  const results = await (session as { run: (feeds: Record<string, unknown>) => Promise<Record<string, { dims: number[]; data: Float32Array }>> }).run(feeds);
-  const output = results[(session as { outputNames: string[] }).outputNames[0]];
+  const results = await session.run(feeds);
+  const output = results[session.outputNames[0]];
 
   return createBitmapFromOutput(output, targetWidth, targetHeight);
 }
@@ -140,18 +149,15 @@ function buildInputTensor(
     float32[2 * targetWidth * targetHeight + dstIdx] = data[srcIdx + 2] / 255;
   }
 
-  const chw = new Float32Array([
-    1,
-    3,
-    targetHeight,
-    targetWidth
-  ]);
+  const ort = require('onnxruntime-web') as {
+    Tensor: new (type: string, data: Float32Array, dims: number[]) => ORTTensor;
+  };
 
-  return new Float32Array([...chw, ...float32]);
+  return new ort.Tensor('float32', float32, [1, 3, targetHeight, targetWidth]);
 }
 
 function createBitmapFromOutput(
-  output: { dims: number[]; data: Float32Array },
+  output: ORTTensor,
   width: number,
   height: number
 ): Promise<ImageBitmap> {
@@ -175,7 +181,7 @@ function createBitmapFromOutput(
   return createImageBitmap(imageData);
 }
 
-async function getCachedModel(): Promise<unknown> {
+async function getCachedModel(): Promise<ORTSession | null> {
   try {
     if (typeof indexedDB === 'undefined') {
       return null;
@@ -197,8 +203,10 @@ async function getCachedModel(): Promise<unknown> {
 
     const buffer = new Uint8Array(await cached.blob.arrayBuffer());
     try {
-      const ort = require('onnxruntime-web');
-      return await ort.InferenceSession.create(buffer, {
+      const ort = require('onnxruntime-web') as {
+        InferenceSession: new (buffer: ArrayBuffer, options?: { executionProviders?: string[] }) => ORTSession;
+      };
+      return await new (ort.InferenceSession as any)(buffer, {
         executionProviders: ['wasm']
       });
     } catch (cachedError) {

@@ -401,7 +401,7 @@ function App() {
 
         try {
           const sourceBitmap = await createImageBitmap(resultBlob);
-          let session: unknown;
+          let session: any;
           try {
             session = await ensureUpscalerModel((pct) => {
               setUpscaleProgress({ label: 'Mengunduh model AI', value: pct });
