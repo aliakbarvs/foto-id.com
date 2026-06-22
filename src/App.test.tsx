@@ -3,10 +3,19 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
-const removeBackgroundMock = vi.fn();
+const { ensureUpscalerModelMock, removeBackgroundMock, upscaleImageMock } = vi.hoisted(() => ({
+  ensureUpscalerModelMock: vi.fn(),
+  removeBackgroundMock: vi.fn(),
+  upscaleImageMock: vi.fn()
+}));
 
 vi.mock('@imgly/background-removal', () => ({
   removeBackground: removeBackgroundMock
+}));
+
+vi.mock('./upscaler', () => ({
+  ensureUpscalerModel: ensureUpscalerModelMock,
+  upscaleImage: upscaleImageMock
 }));
 
 let objectUrlIndex = 0;
@@ -20,6 +29,7 @@ let canvasMocks: CanvasMocks;
 type CanvasMocks = {
   createdAnchors: HTMLAnchorElement[];
   createdCanvases: HTMLCanvasElement[];
+  drawImageMock: ReturnType<typeof vi.fn>;
   fillRectMock: ReturnType<typeof vi.fn>;
   toBlobMock: ReturnType<typeof vi.fn>;
 };
@@ -45,6 +55,7 @@ const installImageMock = () => {
 const installCanvasMocks = (): CanvasMocks => {
   const createdAnchors: HTMLAnchorElement[] = [];
   const createdCanvases: HTMLCanvasElement[] = [];
+  const drawImageMock = vi.fn();
   const fillRectMock = vi.fn();
   const toBlobMock = vi.fn((callback: BlobCallback) => {
     callback(new Blob(['composed'], { type: 'image/png' }));
@@ -67,7 +78,7 @@ const installCanvasMocks = (): CanvasMocks => {
       Object.defineProperty(canvas, 'getContext', {
         value: vi.fn(() => ({
           clearRect: vi.fn(),
-          drawImage: vi.fn(),
+          drawImage: drawImageMock,
           fillRect: fillRectMock,
           getImageData: vi.fn(() => ({ width: 120, height: 180, data: imageData }))
         }))
@@ -84,7 +95,7 @@ const installCanvasMocks = (): CanvasMocks => {
     return element;
   }) as typeof document.createElement);
 
-  return { createdAnchors, createdCanvases, fillRectMock, toBlobMock };
+  return { createdAnchors, createdCanvases, drawImageMock, fillRectMock, toBlobMock };
 };
 
 beforeEach(() => {
@@ -92,6 +103,14 @@ beforeEach(() => {
   objectUrlIndex = 0;
   removeBackgroundMock.mockReset();
   removeBackgroundMock.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+  ensureUpscalerModelMock.mockReset();
+  ensureUpscalerModelMock.mockResolvedValue({ inputNames: ['input'], outputNames: ['output'] });
+  upscaleImageMock.mockReset();
+  upscaleImageMock.mockResolvedValue({
+    width: 240,
+    height: 360,
+    close: vi.fn()
+  } as unknown as ImageBitmap);
   objectUrlMock.mockClear();
   revokeObjectUrlMock.mockClear();
   vi.stubGlobal('URL', {
@@ -99,6 +118,14 @@ beforeEach(() => {
     createObjectURL: objectUrlMock,
     revokeObjectURL: revokeObjectUrlMock
   });
+  vi.stubGlobal(
+    'createImageBitmap',
+    vi.fn(async () => ({
+      width: 120,
+      height: 180,
+      close: vi.fn()
+    }) as unknown as ImageBitmap)
+  );
   installImageMock();
   canvasMocks = installCanvasMocks();
 });
@@ -115,6 +142,7 @@ describe('Foto-ID app', () => {
     expect(screen.getByRole('heading', { name: /pasfoto siap pakai/i })).toBeInTheDocument();
     expect(screen.getByText(/AI lokal di browser/i)).toBeInTheDocument();
     expect(screen.getByText(/tidak disimpan oleh Foto-ID/i)).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /HD 2x/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /2x3/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /3x4/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /4x6/i })).toBeInTheDocument();
@@ -163,6 +191,26 @@ describe('Foto-ID app', () => {
     expect(screen.getByText(/hasil siap/i)).toBeInTheDocument();
   });
 
+  it('applies the HD option when it is enabled before upload', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('checkbox', { name: /HD 2x/i }));
+
+    const input = screen.getByLabelText(/pilih foto/i);
+    const file = new File(['image'], 'produk.jpg', { type: 'image/jpeg' });
+    await user.upload(input, file);
+
+    await waitFor(() => expect(ensureUpscalerModelMock).toHaveBeenCalled());
+    expect(upscaleImageMock).toHaveBeenCalledWith(
+      expect.objectContaining({ width: 120, height: 180 }),
+      expect.anything(),
+      2
+    );
+    expect(await screen.findByText(/selesai meningkatkan kualitas/i)).toBeInTheDocument();
+    expect(revokeObjectUrlMock).not.toHaveBeenCalledWith('blob:foto-id-preview-1');
+  });
+
   it('recomposes the preview and export metadata when ecommerce and KTP presets are selected', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -177,6 +225,9 @@ describe('Foto-ID app', () => {
       expect(canvasMocks.toBlobMock).toHaveBeenCalled();
       expect(canvasMocks.createdCanvases.some((canvas) => canvas.width === 900 && canvas.height === 1200)).toBe(true);
     });
+    expect(
+      canvasMocks.drawImageMock.mock.calls.some((call) => call.length === 5)
+    ).toBe(true);
     const initialPreviewUrl = previewImage.getAttribute('src');
     expect(screen.getByRole('link', { name: /unduh png transparan 3x4/i })).toHaveAttribute(
       'download',

@@ -193,19 +193,12 @@ const composePngBlob = async (
     outputContext.fillRect(0, 0, plan.output.width, plan.output.height);
   }
 
-  const targetWidth = plan.drawImage.width;
-  const targetHeight = plan.drawImage.height;
-
   outputContext.drawImage(
     image,
     plan.drawImage.x,
     plan.drawImage.y,
-    targetWidth,
-    targetHeight,
-    plan.drawImage.x,
-    plan.drawImage.y,
-    targetWidth,
-    targetHeight
+    plan.drawImage.width,
+    plan.drawImage.height
   );
 
   return canvasToPngBlob(outputCanvas);
@@ -259,6 +252,17 @@ function App() {
     return url;
   }, []);
 
+  const revokeRememberedObjectUrl = useCallback((targetUrl: string) => {
+    objectUrlsRef.current = objectUrlsRef.current.filter((url) => {
+      if (url !== targetUrl) {
+        return true;
+      }
+
+      URL.revokeObjectURL(url);
+      return false;
+    });
+  }, []);
+
   const clearObjectUrls = useCallback(() => {
     for (const url of objectUrlsRef.current) {
       URL.revokeObjectURL(url);
@@ -298,7 +302,7 @@ function App() {
       }
 
       if (size > MAX_FILE_SIZE) {
-        return `Foto terlalu besar (${formatFileSize(size)}). Maksimal ${formatFileSize(MAX_FILE_SIZE)}.`;
+        return `Ukuran foto maksimal ${formatFileSize(MAX_FILE_SIZE)}. Foto ini ${formatFileSize(size)}.`;
       }
 
       return '';
@@ -364,7 +368,7 @@ function App() {
 
         try {
           const sourceBitmap = await createImageBitmap(resultBlob);
-          let session: any;
+          let session: Awaited<ReturnType<typeof ensureUpscalerModel>>;
           try {
             session = await ensureUpscalerModel((pct) => {
               setUpscaleProgress({ label: 'Mengunduh model AI', value: pct });
@@ -389,8 +393,7 @@ function App() {
           const upscaledBlob = await bitmapToBlob(upscaledBitmap);
           upscaledBitmap.close();
 
-          URL.revokeObjectURL(finalResultUrl);
-          clearObjectUrls();
+          revokeRememberedObjectUrl(finalResultUrl);
           finalResultUrl = rememberObjectUrl(upscaledBlob);
 
           setUpscaleProgress({ label: 'Selesai meningkatkan kualitas', value: 100 });
@@ -420,7 +423,7 @@ function App() {
         'Foto belum bisa diproses. Coba gambar lain, pastikan koneksi stabil saat model pertama kali dimuat, lalu ulangi.'
       );
     }
-  }, [upscaleEnabled, clearObjectUrls, clearPreviewObjectUrl, rememberObjectUrl]);
+  }, [upscaleEnabled, clearObjectUrls, clearPreviewObjectUrl, rememberObjectUrl, revokeRememberedObjectUrl]);
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const [file] = Array.from(event.target.files ?? []);
@@ -455,6 +458,74 @@ function App() {
     }
   };
 
+  const isLoading = processingState === 'loading';
+  const hasResult = processingState === 'ready' && imageState;
+  const hasComposedPreview = previewComposition.status === 'ready' && previewComposition.url;
+
+  const selectedPresetSpec = getPresetSpec(selectedPresetId);
+  const selectedBackground = BACKGROUND_CHOICES.find((b) => b.id === selectedBackgroundId)!;
+  const presetBehavior = selectedPresetSpec.kind === 'ecommerce' ? 'center' : 'auto crop';
+  const exportDimensions = `${selectedPresetSpec.output.width} x ${selectedPresetSpec.output.height} px`;
+  const composedDownloadName = imageState
+    ? createComposedDownloadName(imageState.fileName, selectedPresetSpec.id, selectedBackground.downloadLabel)
+    : '';
+
+  useEffect(() => {
+    if (processingState !== 'ready' || !imageState) {
+      return;
+    }
+
+    const currentPreviewRunId = previewRunIdRef.current + 1;
+    previewRunIdRef.current = currentPreviewRunId;
+    let isCancelled = false;
+
+    clearPreviewObjectUrl();
+    setPreviewComposition({ status: 'loading', url: '', errorMessage: '' });
+
+    const composePreview = async () => {
+      try {
+        const blob = await composePngBlob(imageState.resultUrl, selectedPresetSpec.id, selectedBackground);
+
+        if (isCancelled || previewRunIdRef.current !== currentPreviewRunId) {
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
+
+        if (isCancelled || previewRunIdRef.current !== currentPreviewRunId) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+
+        clearPreviewObjectUrl();
+        previewObjectUrlRef.current = url;
+        setPreviewComposition({ status: 'ready', url, errorMessage: '' });
+      } catch {
+        if (isCancelled || previewRunIdRef.current !== currentPreviewRunId) {
+          return;
+        }
+
+        clearPreviewObjectUrl();
+        setPreviewComposition({
+          status: 'error',
+          url: '',
+          errorMessage: 'Preview preset belum bisa disusun. Coba preset lain atau unduh ulang.'
+        });
+      }
+    };
+
+    void composePreview();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [clearPreviewObjectUrl, imageState, processingState, selectedBackground, selectedPresetSpec.id]);
+
+  useEffect(() => () => {
+    clearObjectUrls();
+    clearPreviewObjectUrl();
+  }, [clearObjectUrls, clearPreviewObjectUrl]);
+
   const handleDownload = async (event: ReactMouseEvent<HTMLAnchorElement>) => {
     if (!imageState) {
       return;
@@ -478,18 +549,6 @@ function App() {
       setDownloadError('PNG belum bisa disusun. Coba ulangi unduhan atau proses foto kembali.');
     }
   };
-
-  const isLoading = processingState === 'loading';
-  const hasResult = processingState === 'ready' && imageState;
-  const hasComposedPreview = previewComposition.status === 'ready' && previewComposition.url;
-
-  const selectedPresetSpec = getPresetSpec(selectedPresetId);
-  const selectedBackground = BACKGROUND_CHOICES.find((b) => b.id === selectedBackgroundId)!;
-  const presetBehavior = selectedPresetSpec.kind === 'ecommerce' ? 'center' : 'crop';
-  const exportDimensions = selectedPresetSpec.kind === 'official'
-    ? `${selectedPresetSpec.output.width}×${selectedPresetSpec.output.height}`
-    : `disesuaikan`;
-  const composedDownloadName = imageState ? createComposedDownloadName(imageState.fileName, selectedPresetSpec.id, selectedBackground.downloadLabel) : '';
 
   return (
     <main className="app-shell">
@@ -563,7 +622,7 @@ function App() {
             </span>
             {!imageState && !isLoading ? (
               <>
-                <span className="dropzone-title">Tarif foto di sini untuk mulai</span>
+                <span className="dropzone-title">Tarik foto di sini untuk mulai</span>
                 <span id="file-help" className="dropzone-help">
                   Pilih foto atau tarik ke sini. JPG, PNG, atau WebP. Maksimal {formatFileSize(MAX_FILE_SIZE)}.
                 </span>
@@ -603,37 +662,45 @@ function App() {
             </p>
           </section>
 
+          <section className="enhancer-card" aria-labelledby="enhancer-title">
+            <div className="section-heading">
+              <p className="mini-kicker">Kualitas</p>
+              <h2 id="enhancer-title">Opsional sebelum upload</h2>
+            </div>
+            <label className="enhancer-toggle" htmlFor="enhance-toggle">
+              <input
+                id="enhance-toggle"
+                type="checkbox"
+                checked={upscaleEnabled}
+                disabled={isLoading}
+                onChange={(event) => setUpscaleEnabled(event.target.checked)}
+              />
+              <span className="enhancer-label-text">
+                <strong>HD 2x</strong>
+                <small>Berlaku saat foto diproses.</small>
+              </span>
+            </label>
+            {upscaleProgress.label ? (
+              <div className="enhancer-status" role="status" aria-live="polite">
+                <span>{upscaleProgress.label}</span>
+                <span>{upscaleProgress.value}%</span>
+                <div className="enhancer-progress-track" aria-hidden="true">
+                  <span style={{ width: `${upscaleProgress.value}%` as string }} />
+                </div>
+              </div>
+            ) : (
+              <p className="enhancer-note">
+                Aktifkan sebelum memilih foto. Jika gagal, hasil standar tetap tersedia.
+              </p>
+            )}
+          </section>
+
           {hasResult ? (
             <section className="output-card" aria-labelledby="output-title">
               <div className="section-heading">
                 <p className="mini-kicker">Output</p>
                 <h2 id="output-title">Atur hasil PNG</h2>
               </div>
-              
-              <fieldset className="enhancer-fieldset" aria-labelledby="enhancer-label">
-                <legend id="enhancer-label" className="mini-kicker">Kualitas</legend>
-                <label className="enhancer-toggle" htmlFor="enhance-toggle">
-                  <input
-                    id="enhance-toggle"
-                    type="checkbox"
-                    checked={upscaleEnabled}
-                    onChange={(event) => setUpscaleEnabled(event.target.checked)}
-                  />
-                  <span className="enhancer-label-text">
-                    <strong>HD (2x upscale)</strong>
-                    <small>AI upscaler lokal</small>
-                  </span>
-                </label>
-                {upscaleProgress.label ? (
-                  <div className="enhancer-status" role="status" aria-live="polite">
-                    <span>{upscaleProgress.label}</span>
-                    <span>{upscaleProgress.value}%</span>
-                    <div className="enhancer-progress-track" aria-hidden="true">
-                      <span style={{ width: `${upscaleProgress.value}%` as string }} />
-                    </div>
-                  </div>
-                ) : null}
-              </fieldset>
 
               <fieldset className="background-control" aria-labelledby={backgroundLegendId}>
                 <legend className="mini-kicker" id={backgroundLegendId}>Warna background</legend>
