@@ -582,6 +582,13 @@ h1 {
   line-height: 1.4;
 }
 
+.download-error {
+  margin: -8px 0 0;
+  color: var(--danger);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
 .download-button {
   flex: 0 0 auto;
   min-height: 46px;
@@ -657,13 +664,35 @@ h1 {
 }
 
 .comparison-frame > img,
-.comparison-before {
+.comparison-before,
+.composition-status,
+.composition-error {
   position: absolute;
   inset: 0;
 }
 
 .comparison-frame > img {
   z-index: 1;
+}
+
+.composition-status,
+.composition-error {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  font-weight: 800;
+  z-index: 4;
+}
+
+.composition-status {
+  color: var(--green-dark);
+  background: rgba(247, 250, 246, 0.82);
+}
+
+.composition-error {
+  color: var(--danger);
+  background: #fff4f0;
 }
 
 .comparison-before {

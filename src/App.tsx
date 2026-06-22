@@ -3,19 +3,26 @@ import {
   CSSProperties,
   DragEvent,
   MouseEvent as ReactMouseEvent,
+  useCallback,
   useEffect,
   useId,
   useRef,
   useState
 } from 'react';
+import { getPresetSpec, planImageComposition } from './imageComposition';
 
 type ProcessingState = 'idle' | 'loading' | 'ready' | 'error';
+
+type PreviewCompositionState = {
+  status: ProcessingState;
+  url: string;
+  errorMessage: string;
+};
 
 type ImageState = {
   fileName: string;
   originalUrl: string;
   resultUrl: string;
-  downloadName: string;
 };
 
 type ProgressStatus = {
@@ -70,14 +77,17 @@ const SIZE_PRESETS: SizePreset[] = [
 
 const formatFileSize = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
-const createDownloadName = (fileName: string) => {
+const createSafeBaseName = (fileName: string) => {
   const nameWithoutExtension = fileName.replace(/\.[^/.]+$/, '') || 'foto';
-  const safeName = nameWithoutExtension
+  return nameWithoutExtension
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
+};
 
-  return `foto-id-${safeName || 'hasil'}.png`;
+const createComposedDownloadName = (fileName: string, presetId: string, backgroundLabel: string) => {
+  const safeName = createSafeBaseName(fileName) || 'hasil';
+  return `foto-id-${safeName}-${presetId}-${backgroundLabel}.png`;
 };
 
 const progressLabel = (key: string) => {
@@ -94,6 +104,79 @@ const progressLabel = (key: string) => {
   return 'Memproses foto';
 };
 
+const loadImage = (src: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Image failed to load'));
+    image.src = src;
+  });
+
+const canvasToPngBlob = (canvas: HTMLCanvasElement) =>
+  new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+        return;
+      }
+
+      reject(new Error('Canvas failed to export'));
+    }, 'image/png');
+  });
+
+const composePngBlob = async (
+  imageUrl: string,
+  presetId: string,
+  background: BackgroundChoice
+): Promise<Blob> => {
+  const image = await loadImage(imageUrl);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = sourceWidth;
+  maskCanvas.height = sourceHeight;
+
+  const maskContext = maskCanvas.getContext('2d');
+  if (!maskContext) {
+    throw new Error('Canvas context unavailable');
+  }
+
+  maskContext.drawImage(image, 0, 0, sourceWidth, sourceHeight);
+  const alphaMask = maskContext.getImageData(0, 0, sourceWidth, sourceHeight);
+  const plan = planImageComposition({
+    presetId,
+    sourceWidth,
+    sourceHeight,
+    alphaMask
+  });
+
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = plan.output.width;
+  outputCanvas.height = plan.output.height;
+
+  const outputContext = outputCanvas.getContext('2d');
+  if (!outputContext) {
+    throw new Error('Canvas context unavailable');
+  }
+
+  outputContext.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+
+  if (background.id !== 'transparent') {
+    outputContext.fillStyle = background.cssValue;
+    outputContext.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+  }
+
+  outputContext.drawImage(
+    image,
+    plan.drawImage.x,
+    plan.drawImage.y,
+    plan.drawImage.width,
+    plan.drawImage.height
+  );
+
+  return canvasToPngBlob(outputCanvas);
+};
+
 function App() {
   const fileInputId = useId();
   const backgroundLegendId = useId();
@@ -106,14 +189,25 @@ function App() {
   const [selectedBackgroundId, setSelectedBackgroundId] = useState<BackgroundChoiceId>('transparent');
   const [selectedPresetId, setSelectedPresetId] = useState('3x4');
   const [errorMessage, setErrorMessage] = useState('');
+  const [downloadError, setDownloadError] = useState('');
+  const [previewComposition, setPreviewComposition] = useState<PreviewCompositionState>({
+    status: 'idle',
+    url: '',
+    errorMessage: ''
+  });
   const [comparisonValue, setComparisonValue] = useState(52);
   const [isDragging, setIsDragging] = useState(false);
   const objectUrlsRef = useRef<string[]>([]);
+  const previewObjectUrlRef = useRef('');
   const runIdRef = useRef(0);
+  const previewRunIdRef = useRef(0);
 
   useEffect(() => {
     return () => {
       objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      if (previewObjectUrlRef.current) {
+        URL.revokeObjectURL(previewObjectUrlRef.current);
+      }
     };
   }, []);
 
@@ -128,9 +222,68 @@ function App() {
     objectUrlsRef.current = [];
   };
 
+  const clearPreviewObjectUrl = useCallback(() => {
+    if (!previewObjectUrlRef.current) {
+      return;
+    }
+
+    URL.revokeObjectURL(previewObjectUrlRef.current);
+    previewObjectUrlRef.current = '';
+  }, []);
+
   const selectedBackground =
     BACKGROUND_CHOICES.find((background) => background.id === selectedBackgroundId) ?? BACKGROUND_CHOICES[0];
   const selectedPreset = SIZE_PRESETS.find((preset) => preset.id === selectedPresetId) ?? SIZE_PRESETS[1];
+  const selectedPresetSpec = getPresetSpec(selectedPresetId);
+  const exportDimensions = `${selectedPresetSpec.output.width} x ${selectedPresetSpec.output.height} px`;
+  const presetBehavior =
+    selectedPresetId === 'ecommerce'
+      ? 'auto crop objek, padding, dan center untuk katalog'
+      : 'auto crop subjek, center, dan headroom untuk foto resmi';
+  const composedDownloadName = imageState
+    ? createComposedDownloadName(imageState.fileName, selectedPresetSpec.id, selectedBackground.downloadLabel)
+    : '';
+
+  useEffect(() => {
+    clearPreviewObjectUrl();
+
+    if (!imageState || processingState !== 'ready') {
+      setPreviewComposition({ status: 'idle', url: '', errorMessage: '' });
+      return undefined;
+    }
+
+    const currentPreviewRunId = previewRunIdRef.current + 1;
+    previewRunIdRef.current = currentPreviewRunId;
+    let isActive = true;
+
+    setPreviewComposition({ status: 'loading', url: '', errorMessage: '' });
+
+    void composePngBlob(imageState.resultUrl, selectedPresetSpec.id, selectedBackground)
+      .then((blob) => {
+        if (!isActive || previewRunIdRef.current !== currentPreviewRunId) {
+          return;
+        }
+
+        const previewUrl = URL.createObjectURL(blob);
+        previewObjectUrlRef.current = previewUrl;
+        setPreviewComposition({ status: 'ready', url: previewUrl, errorMessage: '' });
+      })
+      .catch(() => {
+        if (!isActive || previewRunIdRef.current !== currentPreviewRunId) {
+          return;
+        }
+
+        setPreviewComposition({
+          status: 'error',
+          url: '',
+          errorMessage: 'Preview preset belum bisa disusun. Coba pilih preset lain atau proses ulang foto.'
+        });
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [clearPreviewObjectUrl, imageState, processingState, selectedBackground, selectedPresetSpec.id]);
 
   const validateImage = (file: File) => {
     if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -150,6 +303,9 @@ function App() {
     if (validationMessage) {
       runIdRef.current += 1;
       clearObjectUrls();
+      previewRunIdRef.current += 1;
+      clearPreviewObjectUrl();
+      setPreviewComposition({ status: 'idle', url: '', errorMessage: '' });
       setImageState(null);
       setProgress({ label: 'Gagal divalidasi', value: 0 });
       setProcessingState('error');
@@ -160,7 +316,11 @@ function App() {
     const currentRunId = runIdRef.current + 1;
     runIdRef.current = currentRunId;
     clearObjectUrls();
+    previewRunIdRef.current += 1;
+    clearPreviewObjectUrl();
+    setPreviewComposition({ status: 'idle', url: '', errorMessage: '' });
     setErrorMessage('');
+    setDownloadError('');
     setImageState(null);
     setSelectedBackgroundId('transparent');
     setComparisonValue(52);
@@ -194,8 +354,7 @@ function App() {
       setImageState({
         fileName: file.name,
         originalUrl,
-        resultUrl,
-        downloadName: createDownloadName(file.name)
+        resultUrl
       });
       setProgress({ label: 'Hasil siap', value: 100 });
       setProcessingState('ready');
@@ -246,47 +405,30 @@ function App() {
     }
   };
 
-  const handleDownload = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-    if (!imageState || selectedBackground.id === 'transparent') {
+  const handleDownload = async (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (!imageState) {
       return;
     }
 
     event.preventDefault();
+    setDownloadError('');
 
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-
-      const context = canvas.getContext('2d');
-      if (!context) {
-        return;
-      }
-
-      context.fillStyle = selectedBackground.cssValue;
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0);
-
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          return;
-        }
-
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = imageState.downloadName.replace(/\.png$/, `-${selectedBackground.downloadLabel}.png`);
-        link.click();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }, 'image/png');
-    };
-
-    image.src = imageState.resultUrl;
+    try {
+      const blob = await composePngBlob(imageState.resultUrl, selectedPresetSpec.id, selectedBackground);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = composedDownloadName;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setDownloadError('PNG belum bisa disusun. Coba ulangi unduhan atau proses foto kembali.');
+    }
   };
 
   const isLoading = processingState === 'loading';
   const hasResult = processingState === 'ready' && imageState;
+  const hasComposedPreview = previewComposition.status === 'ready' && previewComposition.url;
 
   return (
     <main className="app-shell">
@@ -360,7 +502,9 @@ function App() {
                 </button>
               ))}
             </div>
-            <p className="preset-note">Terpilih: {selectedPreset.label}</p>
+            <p className="preset-note">
+              Terpilih: {selectedPreset.label} - {presetBehavior}; ekspor {exportDimensions}.
+            </p>
           </section>
 
           {isLoading ? (
@@ -440,23 +584,29 @@ function App() {
                   <p className="result-kicker">Hasil siap</p>
                   <h2>{imageState.fileName}</h2>
                   <p className="result-meta">
-                    Preset: {selectedPreset.label} · Background: {selectedBackground.label}
+                    Preset: {selectedPreset.label} - {presetBehavior}, ekspor {exportDimensions} · Background:{' '}
+                    {selectedBackground.label}
                   </p>
                 </div>
                 <a
                   className="download-button"
                   href={imageState.resultUrl}
-                  download={imageState.downloadName}
+                  download={composedDownloadName}
                   onClick={handleDownload}
                 >
-                  Unduh PNG {selectedBackground.downloadLabel}
+                  Unduh PNG {selectedBackground.downloadLabel} {selectedPreset.label}
                 </a>
               </div>
+              {downloadError ? (
+                <p className="download-error" role="alert">
+                  {downloadError}
+                </p>
+              ) : null}
 
               <div className="comparison-card">
                 <div className="comparison-labels" aria-hidden="true">
                   <span>Asli</span>
-                  <span>{selectedBackground.label}</span>
+                  <span>Auto crop export</span>
                 </div>
                 <div
                   className={`comparison-frame background-${selectedBackground.id}`}
@@ -467,7 +617,19 @@ function App() {
                     } as CSSProperties
                   }
                 >
-                  <img src={imageState.resultUrl} alt="Hasil foto dengan background transparan" />
+                  {previewComposition.status === 'loading' ? (
+                    <div className="composition-status" role="status" aria-live="polite">
+                      Menyusun preview preset...
+                    </div>
+                  ) : null}
+                  {previewComposition.status === 'error' ? (
+                    <div className="composition-error" role="alert">
+                      {previewComposition.errorMessage}
+                    </div>
+                  ) : null}
+                  {hasComposedPreview ? (
+                    <img src={previewComposition.url} alt="Hasil foto sesuai preset export" />
+                  ) : null}
                   <div className="comparison-before">
                     <img src={imageState.originalUrl} alt="Foto asli sebelum background dihapus" />
                   </div>
