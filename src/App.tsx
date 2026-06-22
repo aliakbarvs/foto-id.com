@@ -401,11 +401,26 @@ function App() {
 
         try {
           const sourceBitmap = await createImageBitmap(resultBlob);
-          const session = await ensureUpscalerModel((pct) => {
-            setUpscaleProgress({ label: 'Mengunduh model AI', value: pct });
-          });
+          let session: unknown;
+          try {
+            session = await ensureUpscalerModel((pct) => {
+              setUpscaleProgress({ label: 'Mengunduh model AI', value: pct });
+            });
+          } catch (modelError) {
+            const detail = modelError instanceof Error ? modelError.message : String(modelError);
+            console.error('[foto-id] upscaler model init failed:', detail);
+            throw new Error(`Model AI gagal dimuat: ${detail}`);
+          }
 
-          const upscaledBitmap = await upscaleImage(sourceBitmap, session, 2);
+          let upscaledBitmap: ImageBitmap;
+          try {
+            upscaledBitmap = await upscaleImage(sourceBitmap, session, 2);
+          } catch (runError) {
+            const detail = runError instanceof Error ? runError.message : String(runError);
+            console.error('[foto-id] upscaler inference failed:', detail);
+            throw new Error(`Peningkatan kualitas gagal saat memproses: ${detail}`);
+          }
+
           sourceBitmap.close();
 
           const upscaledBlob = await bitmapToBlob(upscaledBitmap);
@@ -417,7 +432,9 @@ function App() {
 
           setUpscaleProgress({ label: 'Selesai meningkatkan kualitas', value: 100 });
         } catch (upscaleError) {
-          setUpscaleProgress({ label: 'Peningkatan kualitas gagal', value: 0 });
+          const message = upscaleError instanceof Error ? upscaleError.message : String(upscaleError);
+          console.error('[foto-id] upscaling failed:', message);
+          setUpscaleProgress({ label: message || 'Peningkatan kualitas gagal', value: 0 });
         }
       }
 

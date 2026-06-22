@@ -14,11 +14,19 @@ export async function ensureUpscalerModel(
 
   onProgress?.(10);
 
-  const response = await fetch(MODEL_URL, {
-    mode: 'cors'
-  });
+  let response: Response;
+  try {
+    response = await fetch(MODEL_URL, {
+      mode: 'cors'
+    });
+  } catch (fetchError) {
+    const detail = fetchError instanceof Error ? fetchError.message : String(fetchError);
+    console.error('[foto-id] upscaler fetch failed:', detail);
+    throw new Error(`Gagal mengunduh model AI: ${detail}`);
+  }
 
   if (!response.ok) {
+    console.error('[foto-id] upscaler fetch HTTP error:', response.status, response.statusText);
     throw new Error(`Gagal mengunduh model AI (HTTP ${response.status}).`);
   }
 
@@ -58,16 +66,25 @@ export async function ensureUpscalerModel(
 
   try {
     const ort = require('onnxruntime-web');
-    const session = await ort.InferenceSession.create(buffer, {
-      executionProviders: ['wasm']
-    });
+    let session: unknown;
+    try {
+      session = await ort.InferenceSession.create(buffer, {
+        executionProviders: ['wasm']
+      });
+    } catch (sessionError) {
+      const detail = sessionError instanceof Error ? sessionError.message : String(sessionError);
+      console.error('[foto-id] upscaler session creation failed:', detail);
+      throw new Error(`Gagal memulai model AI: ${detail}`);
+    }
 
     await cacheModel(buffer);
     onProgress?.(100);
 
     return session;
   } catch (error) {
-    throw new Error('Model AI tidak bisa dijalankan di browser ini.');
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error('[foto-id] upscaler init failed:', detail);
+    throw new Error(`Model AI tidak bisa dijalankan di browser ini: ${detail}`);
   }
 }
 
@@ -179,10 +196,15 @@ async function getCachedModel(): Promise<unknown> {
     }
 
     const buffer = new Uint8Array(await cached.blob.arrayBuffer());
-    const ort = require('onnxruntime-web');
-    return ort.InferenceSession.create(buffer, {
-      executionProviders: ['wasm']
-    });
+    try {
+      const ort = require('onnxruntime-web');
+      return await ort.InferenceSession.create(buffer, {
+        executionProviders: ['wasm']
+      });
+    } catch (cachedError) {
+      console.error('[foto-id] upscaler cache restore failed:', cachedError);
+      return null;
+    }
   } catch {
     return null;
   }
