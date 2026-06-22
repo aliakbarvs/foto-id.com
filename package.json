@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@imgly/background-removal": "1.7.0",
+    "onnxruntime-web": "1.21.0",
     "@vitejs/plugin-react": "5.0.4",
     "vite": "7.1.12",
     "react": "19.2.0",

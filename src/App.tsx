@@ -10,6 +10,7 @@ import {
   useState
 } from 'react';
 import { getPresetSpec, planImageComposition } from './imageComposition';
+import { ensureUpscalerModel, upscaleImage } from './upscaler';
 
 type ProcessingState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -124,6 +125,20 @@ const canvasToPngBlob = (canvas: HTMLCanvasElement) =>
     }, 'image/png');
   });
 
+const bitmapToBlob = (bitmap: ImageBitmap): Promise<Blob> => {
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Canvas context unavailable');
+  }
+
+  ctx.drawImage(bitmap, 0, 0);
+  return canvasToPngBlob(canvas);
+};
+
 const composePngBlob = async (
   imageUrl: string,
   presetId: string,
@@ -199,6 +214,8 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [isOnboarded, setIsOnboarded] = useState(true);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [upscaleEnabled, setUpscaleEnabled] = useState(false);
+  const [upscaleProgress, setUpscaleProgress] = useState({ label: '', value: 0 });
   const objectUrlsRef = useRef<string[]>([]);
   const previewObjectUrlRef = useRef('');
   const runIdRef = useRef(0);
@@ -376,11 +393,38 @@ function App() {
         return;
       }
 
-      const resultUrl = rememberObjectUrl(resultBlob);
+      let finalResultUrl = rememberObjectUrl(resultBlob);
+
+      if (upscaleEnabled) {
+        setProgress({ label: 'Meningkatkan kualitas foto', value: 97 });
+        setUpscaleProgress({ label: 'Mempersiapkan peningkatan kualitas', value: 0 });
+
+        try {
+          const sourceBitmap = await createImageBitmap(resultBlob);
+          const session = await ensureUpscalerModel((pct) => {
+            setUpscaleProgress({ label: 'Mengunduh model AI', value: pct });
+          });
+
+          const upscaledBitmap = await upscaleImage(sourceBitmap, session, 2);
+          sourceBitmap.close();
+
+          const upscaledBlob = await bitmapToBlob(upscaledBitmap);
+          upscaledBitmap.close();
+
+          URL.revokeObjectURL(finalResultUrl);
+          clearObjectUrls();
+          finalResultUrl = rememberObjectUrl(upscaledBlob);
+
+          setUpscaleProgress({ label: 'Selesai meningkatkan kualitas', value: 100 });
+        } catch (upscaleError) {
+          setUpscaleProgress({ label: 'Peningkatan kualitas gagal', value: 0 });
+        }
+      }
+
       setImageState({
         fileName: file.name,
         originalUrl,
-        resultUrl
+        resultUrl: finalResultUrl
       });
       setProgress({ label: 'Hasil siap', value: 100 });
       setProcessingState('ready');
@@ -569,6 +613,36 @@ function App() {
             <p className="preset-note">
               Terpilih: {selectedPreset.label} - {presetBehavior}; ekspor {exportDimensions}.
             </p>
+          </section>
+
+          <section className="enhancer-card" aria-labelledby="enhancer-title">
+            <div className="section-heading">
+              <p className="mini-kicker">Peningkatan</p>
+              <h2 id="enhancer-title">Kualitas foto</h2>
+            </div>
+            <label className="enhancer-toggle" htmlFor="enhance-toggle">
+              <input
+                id="enhance-toggle"
+                type="checkbox"
+                checked={upscaleEnabled}
+                onChange={(event) => setUpscaleEnabled(event.target.checked)}
+              />
+              <span>Tingkatkan kualitas (2x)</span>
+            </label>
+            <p className="enhancer-note">
+              AI upscaler berjalan lokal di browser. Model akan diunduh sekali dan disimpan di perangkat Anda.
+            </p>
+            {upscaleEnabled && upscaleProgress.label ? (
+              <div className="status-card" role="status" aria-live="polite">
+                <div className="status-topline">
+                  <span>{upscaleProgress.label}</span>
+                  <span>{upscaleProgress.value}%</span>
+                </div>
+                <div className="progress-track" aria-hidden="true">
+                  <span style={{ width: `${upscaleProgress.value}%` }} />
+                </div>
+              </div>
+            ) : null}
           </section>
 
           {isLoading ? (
