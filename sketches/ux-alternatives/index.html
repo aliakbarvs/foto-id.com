@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Foto-ID UX Alternatives</title>
+  <style>
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f1412;color:#17201c;-webkit-font-smoothing:antialiased} button,input{font:inherit} .shell{padding:24px;max-width:1500px;margin:auto}.top{color:#f7fbf6;margin-bottom:20px;display:flex;justify-content:space-between;gap:16px;align-items:end}.top h1{margin:0;font-size:clamp(28px,4vw,56px);line-height:.95;letter-spacing:-.05em}.top p{margin:8px 0 0;color:#b9c7bf;max-width:720px;line-height:1.55}.tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs button{border:1px solid #33423a;background:#18211d;color:#dce8e0;border-radius:999px;padding:10px 14px;cursor:pointer}.tabs button.active{background:#eaf8ef;color:#163724;border-color:#eaf8ef}.variant{display:none;min-height:760px;border-radius:30px;overflow:hidden;background:#f6f8f4}.variant.active{display:block}.badge{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.btn{border:0;border-radius:999px;padding:15px 20px;font-weight:850;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:10px;transition:.18s ease}.btn:hover{transform:translateY(-1px)}.grid{display:grid}.checker{background-image:linear-gradient(45deg,#dfe8e2 25%,transparent 25%),linear-gradient(-45deg,#dfe8e2 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#dfe8e2 75%),linear-gradient(-45deg,transparent 75%,#dfe8e2 75%);background-color:white;background-position:0 0,0 13px,13px -13px,-13px 0;background-size:26px 26px}.drop{border:1.5px dashed rgba(31,122,85,.35);border-radius:28px;min-height:280px;display:grid;place-items:center;text-align:center;padding:28px;background:rgba(255,255,255,.75)}.phone{width:310px;border-radius:38px;background:#111;box-shadow:0 26px 70px rgba(0,0,0,.22);padding:10px}.screen{border-radius:30px;overflow:hidden;background:#fff;min-height:560px}.mini-photo{width:190px;height:235px;border-radius:26px;margin:auto;position:relative;overflow:hidden;box-shadow:0 18px 50px rgba(17,32,26,.16)}.person{position:absolute;inset:42px 32px 0;background:linear-gradient(#334a40,#1c2a25);border-radius:90px 90px 22px 22px}.head{position:absolute;top:28px;left:62px;width:66px;height:66px;border-radius:50%;background:#d59a73}.upload-mark{width:62px;height:62px;border-radius:22px;background:#1f7a55;color:white;display:grid;place-items:center;margin:0 auto 18px;font-size:32px}.subtle{color:#64716a;line-height:1.55}.v1{background:#f7faf5;padding:30px}.v1 .hero{grid-template-columns:1fr 460px;gap:34px;align-items:center}.v1 h2{font-size:clamp(44px,7vw,96px);line-height:.88;letter-spacing:-.07em;margin:18px 0;color:#14231c}.v1 .panel{background:white;border:1px solid #dde7df;border-radius:34px;padding:24px;box-shadow:0 24px 80px rgba(24,45,35,.12)}.v1 .btn{background:#17201c;color:white}.v1 .preset-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}.v1 .preset-row span{border:1px solid #dce7de;background:#f8fbf7;border-radius:999px;padding:8px 11px;font-size:13px;font-weight:750}.v2{background:#101614;color:#eef6ef;padding:24px}.v2 .layout{grid-template-columns:330px 1fr 300px;gap:18px;height:720px}.v2 .card{background:#18211d;border:1px solid #29362f;border-radius:26px;padding:20px}.v2 h2{font-size:52px;letter-spacing:-.06em;line-height:.92;margin:12px 0 16px}.v2 .btn{background:#d8ff7a;color:#17201c;width:100%}.v2 .canvas{border-radius:30px;background:#0c100f;padding:18px;display:grid;place-items:center;border:1px solid #29362f}.v2 .photo-stage{width:min(100%,560px);height:620px;border-radius:30px;display:grid;place-items:center}.v2 .tool{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #29362f;padding:13px 0;color:#c8d5ce}.v2 .swatches{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}.v2 .swatches span{height:54px;border-radius:18px;border:1px solid #35443b}.v3{background:linear-gradient(135deg,#ecf7ff,#fff6ed 45%,#f7fff3);padding:28px}.v3 .layout{grid-template-columns:1.05fr .95fr;gap:26px;align-items:center}.v3 h2{font-size:clamp(46px,7vw,86px);line-height:.9;letter-spacing:-.075em;margin:18px 0;color:#17201c}.v3 .glass{background:rgba(255,255,255,.58);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.72);box-shadow:0 28px 90px rgba(78,103,92,.16);border-radius:36px}.v3 .steps{display:grid;gap:12px;margin-top:22px}.v3 .steps div{display:flex;gap:12px;align-items:center;background:rgba(255,255,255,.62);border-radius:22px;padding:13px 14px}.v3 .num{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#88B04B;color:white;font-weight:900}.v3 .btn{background:#E8927C;color:#2D2A26}.v3 .preview{padding:22px}.v3 .floating{animation:float 3.2s ease-in-out infinite}@keyframes float{50%{transform:translateY(-10px)}}@media(max-width:980px){.v1 .hero,.v2 .layout,.v3 .layout{grid-template-columns:1fr;height:auto}.v2 .layout{height:auto}.v2 .photo-stage{height:440px}.top{display:block}.phone{margin:auto}.variant{min-height:auto}.shell{padding:14px}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="top">
+      <div><h1>Foto-ID UX directions</h1><p>Three real alternatives. Not color swaps. Pick based on product wedge: pasfoto utility, pro editing console, or friendly local-first AI.</p></div>
+      <div class="tabs"><button class="active" data-tab="v1">A. Pasfoto Wizard</button><button data-tab="v2">B. Studio Console</button><button data-tab="v3">C. Friendly Glass</button></div>
+    </div>
+
+    <section id="v1" class="variant v1 active">
+      <div class="grid hero">
+        <div>
+          <span class="badge" style="background:#e7f4ea;color:#1f7a55">Indonesia-first utility</span>
+          <h2>Bikin pasfoto siap pakai, bukan cuma hapus background.</h2>
+          <p class="subtle" style="font-size:20px;max-width:760px">Upload sekali. Foto-ID hapus latar, rapikan crop, lalu ekspor ukuran yang biasa diminta: KTP, sekolah, lamaran kerja, SKCK, visa.</p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:28px"><a class="btn" href="#">Mulai dari foto</a><a class="btn" style="background:white;color:#17201c;border:1px solid #dce7de" href="#">Lihat contoh</a></div>
+          <div class="preset-row"><span>2×3</span><span>3×4</span><span>4×6</span><span>Merah</span><span>Biru</span><span>Putih</span><span>PNG transparan</span></div>
+        </div>
+        <div class="panel">
+          <div class="drop"><div><div class="upload-mark">+</div><h3 style="font-size:28px;margin:0 0 8px">Tarik foto ke sini</h3><p class="subtle">Setelah diproses, pilih warna background dan ukuran cetak.</p></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px"><div class="checker mini-photo"><div class="person"></div><div class="head"></div></div><div style="display:grid;gap:10px"><button class="btn" style="background:#d21f3c;color:white">Merah pasfoto</button><button class="btn" style="background:#1f65d8;color:white">Biru pasfoto</button><button class="btn" style="background:#f7faf5;color:#17201c;border:1px solid #dce7de">Transparan</button></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="v2" class="variant v2">
+      <div class="grid layout">
+        <aside class="card"><span class="badge" style="background:#d8ff7a;color:#17201c">Fast tool</span><h2>Background remover with controls.</h2><p style="color:#aab8b1;line-height:1.55">For ecommerce sellers and power users. Less story, more knobs. Everything important visible.</p><button class="btn" style="margin-top:18px">Upload image</button><div style="margin-top:18px" class="tool"><span>Status</span><strong>Ready</strong></div><div class="tool"><span>Output</span><strong>PNG</strong></div><div class="tool"><span>Max file</span><strong>12 MB</strong></div></aside>
+        <main class="canvas"><div class="photo-stage checker"><div class="mini-photo" style="width:300px;height:390px"><div class="person"></div><div class="head" style="left:117px"></div></div></div></main>
+        <aside class="card"><h3 style="font-size:24px;margin:0 0 12px">Export settings</h3><div class="tool"><span>Crop</span><strong>Original</strong></div><div class="tool"><span>Shadow</span><strong>Soft</strong></div><div class="tool"><span>Edge cleanup</span><strong>Auto</strong></div><p style="margin:22px 0 8px;color:#aab8b1;font-weight:800">Background</p><div class="swatches"><span style="background:white"></span><span style="background:#d21f3c"></span><span style="background:#1f65d8"></span><span style="background:#e5e7eb"></span><span class="checker"></span><span style="background:#111"></span></div><button class="btn" style="margin-top:18px;background:white;color:#17201c">Download</button></aside>
+      </div>
+    </section>
+
+    <section id="v3" class="variant v3">
+      <div class="grid layout">
+        <div>
+          <span class="badge" style="background:rgba(255,255,255,.7);color:#2D2A26">Private local AI</span>
+          <h2>Hapus latar tanpa rasa “upload ke mesin asing”.</h2>
+          <p class="subtle" style="font-size:20px;max-width:720px">A friendly, trust-heavy interface. Best if we want parents, students, and non-technical users to feel safe.</p>
+          <div class="steps"><div><span class="num">1</span><strong>Pilih foto</strong><span class="subtle">JPG, PNG, WebP</span></div><div><span class="num">2</span><strong>AI berjalan di browser</strong><span class="subtle">Foto tidak kami simpan</span></div><div><span class="num">3</span><strong>Unduh hasil</strong><span class="subtle">PNG transparan / warna solid</span></div></div>
+          <div style="margin-top:26px"><a class="btn" href="#">Coba sekarang</a></div>
+        </div>
+        <div class="glass preview floating">
+          <div class="phone"><div class="screen" style="background:linear-gradient(#f9fff7,#edf8ff);padding:20px"><div style="height:8px;width:70px;background:#111;border-radius:99px;margin:0 auto 22px;opacity:.9"></div><div class="drop" style="min-height:190px;border-radius:24px;background:rgba(255,255,255,.7)"><div><div class="upload-mark" style="background:#E8927C;color:#2D2A26">+</div><strong>Tap untuk pilih foto</strong></div></div><div class="checker mini-photo" style="margin-top:18px"><div class="person"></div><div class="head"></div></div><button class="btn" style="width:100%;margin-top:18px">Unduh PNG</button></div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+<script>
+  document.querySelectorAll('[data-tab]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.variant').forEach(v=>v.classList.remove('active'));btn.classList.add('active');document.getElementById(btn.dataset.tab).classList.add('active')}))
+</script>
+</body>
+</html>

@@ -25,12 +25,21 @@ beforeEach(() => {
 });
 
 describe('Foto-ID app', () => {
-  it('renders Indonesian-first product copy and privacy assurance', () => {
+  it('renders Indonesian-first pasfoto copy, privacy assurance, and size presets', () => {
     render(<App />);
 
     expect(screen.getByText('Foto-ID')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /hapus background foto/i })).toBeInTheDocument();
-    expect(screen.getByText(/diproses lokal di browser/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /pasfoto siap pakai/i })).toBeInTheDocument();
+    expect(screen.getByText(/AI lokal di browser/i)).toBeInTheDocument();
+    expect(screen.getByText(/tidak disimpan oleh Foto-ID/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /2x3/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /3x4/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /4x6/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /KTP/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /SKCK/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sekolah/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /lamaran kerja/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /ecommerce/i })).toBeInTheDocument();
   });
 
   it('rejects oversized uploads with an accessible error', async () => {
@@ -45,7 +54,7 @@ describe('Foto-ID app', () => {
     expect(removeBackgroundMock).not.toHaveBeenCalled();
   });
 
-  it('removes the background and exposes comparison plus download controls', async () => {
+  it('removes the background and exposes comparison, color, preset, and download controls', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -59,6 +68,13 @@ describe('Foto-ID app', () => {
       'foto-id-produk.png'
     );
     expect(screen.getByRole('slider', { name: /atur perbandingan/i })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: /warna background/i })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /transparan/i })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: /merah/i }));
+    expect(screen.getByRole('radio', { name: /merah/i })).toBeChecked();
+    expect(screen.getByRole('button', { name: /3x4 pasfoto/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /lamaran kerja/i }));
+    expect(screen.getByText(/preset: Lamaran kerja/i)).toBeInTheDocument();
     expect(screen.getByText(/hasil siap/i)).toBeInTheDocument();
   });
 });

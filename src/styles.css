@@ -1,6 +1,6 @@
 :root {
   color: #17201c;
-  background: #f6f8f4;
+  background: #f5f7f8;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
@@ -14,7 +14,9 @@
   --green: #1f7a55;
   --green-dark: #155f42;
   --aqua: #dff5ef;
+  --blue: #1f6feb;
   --gold: #f1b84b;
+  --red: #d32027;
   --danger: #b33232;
   --shadow: 0 24px 70px rgba(32, 45, 37, 0.13);
 }
@@ -56,6 +58,8 @@ img {
 .hero-copy,
 .privacy-panel,
 .tool-panel,
+.preset-card,
+.output-card,
 .preview-panel {
   border: 1px solid rgba(23, 32, 28, 0.09);
   background: rgba(255, 255, 255, 0.88);
@@ -70,8 +74,8 @@ img {
   flex-direction: column;
   justify-content: center;
   background:
-    linear-gradient(135deg, rgba(223, 245, 239, 0.82), rgba(255, 255, 255, 0.92)),
-    radial-gradient(circle at 90% 12%, rgba(241, 184, 75, 0.32), transparent 34%);
+    linear-gradient(135deg, rgba(223, 245, 239, 0.84), rgba(255, 255, 255, 0.94)),
+    linear-gradient(90deg, rgba(211, 32, 39, 0.11), rgba(31, 111, 235, 0.09));
 }
 
 .eyebrow,
@@ -130,8 +134,11 @@ h1 {
   gap: 16px;
   align-items: flex-start;
   align-self: end;
-  background: #17201c;
+  background:
+    linear-gradient(145deg, rgba(23, 32, 28, 0.96), rgba(34, 56, 49, 0.9)),
+    rgba(23, 32, 28, 0.94);
   color: #f7fbf6;
+  backdrop-filter: blur(18px);
 }
 
 .privacy-icon {
@@ -144,6 +151,10 @@ h1 {
   background: var(--aqua);
   color: var(--green-dark);
   font-weight: 900;
+}
+
+.privacy-icon::before {
+  content: "ID";
 }
 
 .privacy-panel h2 {
@@ -182,7 +193,7 @@ h1 {
 }
 
 .dropzone {
-  min-height: 300px;
+  min-height: 260px;
   border: 2px dashed #a8b8ae;
   border-radius: 8px;
   display: grid;
@@ -252,8 +263,155 @@ h1 {
 }
 
 .dropzone-help {
+  max-width: 280px;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.preset-card,
+.output-card {
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: none;
+}
+
+.section-heading {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.section-heading h2 {
+  margin-bottom: 0;
+  font-size: 1rem;
+}
+
+.mini-kicker {
+  margin: 0;
+  color: var(--green-dark);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preset-button {
+  min-height: 66px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  text-align: left;
+  background: #fbfcfb;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.preset-button:hover,
+.preset-button:focus-visible {
+  border-color: rgba(31, 122, 85, 0.42);
+  transform: translateY(-1px);
+}
+
+.preset-button.is-selected {
+  border-color: var(--green);
+  background: #eef8f3;
+  box-shadow: inset 0 0 0 1px rgba(31, 122, 85, 0.18);
+}
+
+.preset-button span {
+  font-weight: 900;
+}
+
+.preset-button small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.preset-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.background-control {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.background-control legend {
+  margin-bottom: 10px;
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.background-options {
+  display: grid;
+  gap: 8px;
+}
+
+.background-option {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.background-option:has(input:checked) {
+  border-color: var(--green);
+  background: #eef8f3;
+}
+
+.background-option input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(23, 32, 28, 0.16);
+  border-radius: 999px;
+  background: var(--swatch);
+}
+
+.swatch-transparent {
+  background:
+    linear-gradient(45deg, #dfe8e2 25%, transparent 25%),
+    linear-gradient(-45deg, #dfe8e2 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #dfe8e2 75%),
+    linear-gradient(-45deg, transparent 75%, #dfe8e2 75%);
+  background-color: #ffffff;
+  background-position:
+    0 0,
+    0 6px,
+    6px -6px,
+    -6px 0;
+  background-size: 12px 12px;
 }
 
 .status-card,
@@ -416,6 +574,14 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.result-meta {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .download-button {
   flex: 0 0 auto;
   min-height: 46px;
@@ -458,6 +624,7 @@ h1 {
 
 .comparison-frame {
   --comparison: 52%;
+  --result-background: transparent;
   position: relative;
   overflow: hidden;
   width: 100%;
@@ -479,6 +646,10 @@ h1 {
   background-size: 28px 28px;
 }
 
+.comparison-frame:not(.background-transparent) {
+  background: var(--result-background);
+}
+
 .comparison-frame img {
   width: 100%;
   height: 100%;
@@ -491,11 +662,16 @@ h1 {
   inset: 0;
 }
 
+.comparison-frame > img {
+  z-index: 1;
+}
+
 .comparison-before {
   width: 100%;
   overflow: hidden;
   border-right: 2px solid #ffffff;
   clip-path: inset(0 calc(100% - var(--comparison)) 0 0);
+  z-index: 2;
 }
 
 .comparison-before img {
@@ -510,6 +686,7 @@ h1 {
   width: 34px;
   transform: translateX(-50%);
   pointer-events: none;
+  z-index: 3;
 }
 
 .comparison-handle::before {
@@ -595,12 +772,17 @@ h1 {
     padding: 16px;
   }
 
+  .preset-card,
+  .output-card {
+    padding: 14px;
+  }
+
   h1 {
     font-size: clamp(2.25rem, 16vw, 4.1rem);
   }
 
   .dropzone {
-    min-height: 240px;
+    min-height: 220px;
   }
 
   .preview-panel {

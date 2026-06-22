@@ -1,4 +1,13 @@
-import { ChangeEvent, CSSProperties, DragEvent, useEffect, useId, useRef, useState } from 'react';
+import {
+  ChangeEvent,
+  CSSProperties,
+  DragEvent,
+  MouseEvent as ReactMouseEvent,
+  useEffect,
+  useId,
+  useRef,
+  useState
+} from 'react';
 
 type ProcessingState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -22,8 +31,42 @@ type BackgroundRemovalModule = {
   removeBackground: (image: File, options?: RemovalOptions) => Promise<Blob>;
 };
 
+type BackgroundChoiceId = 'transparent' | 'red' | 'blue' | 'white' | 'gray';
+
+type BackgroundChoice = {
+  id: BackgroundChoiceId;
+  label: string;
+  cssValue: string;
+  downloadLabel: string;
+};
+
+type SizePreset = {
+  id: string;
+  label: string;
+  detail: string;
+};
+
 const MAX_FILE_SIZE = 12 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+const BACKGROUND_CHOICES: BackgroundChoice[] = [
+  { id: 'transparent', label: 'Transparan', cssValue: 'transparent', downloadLabel: 'transparan' },
+  { id: 'red', label: 'Merah', cssValue: '#d32027', downloadLabel: 'merah' },
+  { id: 'blue', label: 'Biru', cssValue: '#1f6feb', downloadLabel: 'biru' },
+  { id: 'white', label: 'Putih', cssValue: '#ffffff', downloadLabel: 'putih' },
+  { id: 'gray', label: 'Abu-abu', cssValue: '#e5e7eb', downloadLabel: 'abu-abu' }
+];
+
+const SIZE_PRESETS: SizePreset[] = [
+  { id: '2x3', label: '2x3', detail: 'Pasfoto kecil' },
+  { id: '3x4', label: '3x4', detail: 'Pasfoto' },
+  { id: '4x6', label: '4x6', detail: 'Dokumen' },
+  { id: 'ktp', label: 'KTP', detail: 'Identitas' },
+  { id: 'skck', label: 'SKCK', detail: 'Berkas resmi' },
+  { id: 'sekolah', label: 'Sekolah', detail: 'Administrasi' },
+  { id: 'lamaran-kerja', label: 'Lamaran kerja', detail: 'CV dan berkas' },
+  { id: 'ecommerce', label: 'Ecommerce', detail: 'Foto produk' }
+];
 
 const formatFileSize = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
@@ -53,12 +96,15 @@ const progressLabel = (key: string) => {
 
 function App() {
   const fileInputId = useId();
+  const backgroundLegendId = useId();
   const [processingState, setProcessingState] = useState<ProcessingState>('idle');
   const [imageState, setImageState] = useState<ImageState | null>(null);
   const [progress, setProgress] = useState<ProgressStatus>({
     label: 'Menunggu foto',
     value: 0
   });
+  const [selectedBackgroundId, setSelectedBackgroundId] = useState<BackgroundChoiceId>('transparent');
+  const [selectedPresetId, setSelectedPresetId] = useState('3x4');
   const [errorMessage, setErrorMessage] = useState('');
   const [comparisonValue, setComparisonValue] = useState(52);
   const [isDragging, setIsDragging] = useState(false);
@@ -81,6 +127,10 @@ function App() {
     objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     objectUrlsRef.current = [];
   };
+
+  const selectedBackground =
+    BACKGROUND_CHOICES.find((background) => background.id === selectedBackgroundId) ?? BACKGROUND_CHOICES[0];
+  const selectedPreset = SIZE_PRESETS.find((preset) => preset.id === selectedPresetId) ?? SIZE_PRESETS[1];
 
   const validateImage = (file: File) => {
     if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -112,6 +162,7 @@ function App() {
     clearObjectUrls();
     setErrorMessage('');
     setImageState(null);
+    setSelectedBackgroundId('transparent');
     setComparisonValue(52);
     setProcessingState('loading');
     setProgress({ label: 'Membaca foto', value: 8 });
@@ -195,6 +246,45 @@ function App() {
     }
   };
 
+  const handleDownload = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (!imageState || selectedBackground.id === 'transparent') {
+      return;
+    }
+
+    event.preventDefault();
+
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        return;
+      }
+
+      context.fillStyle = selectedBackground.cssValue;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0);
+
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = imageState.downloadName.replace(/\.png$/, `-${selectedBackground.downloadLabel}.png`);
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }, 'image/png');
+    };
+
+    image.src = imageState.resultUrl;
+  };
+
   const isLoading = processingState === 'loading';
   const hasResult = processingState === 'ready' && imageState;
 
@@ -203,32 +293,29 @@ function App() {
       <section className="hero" aria-labelledby="hero-title">
         <div className="hero-copy">
           <p className="eyebrow">Foto-ID</p>
-          <h1 id="hero-title">Hapus background foto dalam hitungan detik.</h1>
+          <h1 id="hero-title">Pasfoto siap pakai, langsung dari browser.</h1>
           <p className="hero-lede">
-            Buat pasfoto, foto profil, dan gambar produk dengan latar transparan. Foto diproses lokal di browser
-            saat didukung, dan tidak disimpan oleh Foto-ID.
+            Hapus background untuk pasfoto, profil, lamaran kerja, dan ecommerce. Pilih warna latar Indonesia,
+            simpan PNG, dan lanjut tanpa akun.
           </p>
           <div className="trust-row" aria-label="Keunggulan Foto-ID">
-            <span>Tanpa upload ke server Foto-ID</span>
-            <span>PNG transparan</span>
-            <span>Mobile friendly</span>
+            <span>Pasfoto siap pakai</span>
+            <span>Proses lokal saat didukung</span>
+            <span>PNG transparan atau warna</span>
           </div>
         </div>
         <aside className="privacy-panel" aria-label="Privasi">
-          <span className="privacy-icon" aria-hidden="true">
-            ID
-          </span>
+          <span className="privacy-icon" aria-hidden="true" />
           <div>
-            <h2>Privasi tetap di tangan Anda</h2>
+            <h2>Privasi ramah, tanpa penyimpanan</h2>
             <p>
-              Pemrosesan berjalan di perangkat Anda ketika browser mendukung. Foto tidak masuk ke penyimpanan
-              Foto-ID.
+              Foto diproses oleh AI lokal di browser ketika didukung. Gambar Anda tidak disimpan oleh Foto-ID.
             </p>
           </div>
         </aside>
       </section>
 
-      <section className="workspace" aria-label="Penghapus background">
+      <section className="workspace" aria-label="Wizard pasfoto Foto-ID">
         <div className="tool-panel">
           <label
             className={`dropzone${isDragging ? ' is-dragging' : ''}${isLoading ? ' is-loading' : ''}`}
@@ -247,11 +334,34 @@ function App() {
             <span className="dropzone-mark" aria-hidden="true">
               +
             </span>
-            <span className="dropzone-title">Pilih foto atau tarik ke sini</span>
+            <span className="dropzone-title">Upload foto wajah atau produk</span>
             <span id="file-help" className="dropzone-help">
-              JPG, PNG, atau WebP. Maksimal {formatFileSize(MAX_FILE_SIZE)}.
+              Pilih foto atau tarik ke sini. JPG, PNG, atau WebP. Maksimal {formatFileSize(MAX_FILE_SIZE)}.
             </span>
           </label>
+
+          <section className="preset-card" aria-labelledby="preset-title">
+            <div className="section-heading">
+              <p className="mini-kicker">Ukuran</p>
+              <h2 id="preset-title">Pilih kebutuhan pasfoto</h2>
+            </div>
+            <div className="preset-grid">
+              {SIZE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  className={`preset-button${preset.id === selectedPresetId ? ' is-selected' : ''}`}
+                  type="button"
+                  aria-label={`${preset.label} ${preset.detail}`}
+                  aria-pressed={preset.id === selectedPresetId}
+                  onClick={() => setSelectedPresetId(preset.id)}
+                >
+                  <span>{preset.label}</span>
+                  <small>{preset.detail}</small>
+                </button>
+              ))}
+            </div>
+            <p className="preset-note">Terpilih: {selectedPreset.label}</p>
+          </section>
 
           {isLoading ? (
             <div className="status-card" role="status" aria-live="polite">
@@ -272,6 +382,36 @@ function App() {
               <p>{errorMessage}</p>
             </div>
           ) : null}
+
+          {hasResult ? (
+            <section className="output-card" aria-labelledby="output-title">
+              <div className="section-heading">
+                <p className="mini-kicker">Output</p>
+                <h2 id="output-title">Atur hasil PNG</h2>
+              </div>
+              <fieldset className="background-control" aria-labelledby={backgroundLegendId}>
+                <legend id={backgroundLegendId}>Warna background</legend>
+                <div className="background-options" role="radiogroup" aria-labelledby={backgroundLegendId}>
+                  {BACKGROUND_CHOICES.map((background) => (
+                    <label key={background.id} className="background-option">
+                      <input
+                        type="radio"
+                        name="background"
+                        checked={background.id === selectedBackgroundId}
+                        onChange={() => setSelectedBackgroundId(background.id)}
+                      />
+                      <span
+                        className={`swatch swatch-${background.id}`}
+                        style={{ '--swatch': background.cssValue } as CSSProperties}
+                        aria-hidden="true"
+                      />
+                      <span>{background.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </section>
+          ) : null}
         </div>
 
         <div className="preview-panel">
@@ -280,8 +420,8 @@ function App() {
               <div className="empty-frame" aria-hidden="true">
                 <span />
               </div>
-              <h2>Preview akan muncul di sini</h2>
-              <p>Bandingkan foto asli dan hasil transparan sebelum mengunduh PNG.</p>
+              <h2>Mulai dari satu foto</h2>
+              <p>Hasil pasfoto akan muncul di sini setelah background dihapus.</p>
             </div>
           ) : null}
 
@@ -299,18 +439,34 @@ function App() {
                 <div>
                   <p className="result-kicker">Hasil siap</p>
                   <h2>{imageState.fileName}</h2>
+                  <p className="result-meta">
+                    Preset: {selectedPreset.label} · Background: {selectedBackground.label}
+                  </p>
                 </div>
-                <a className="download-button" href={imageState.resultUrl} download={imageState.downloadName}>
-                  Unduh PNG transparan
+                <a
+                  className="download-button"
+                  href={imageState.resultUrl}
+                  download={imageState.downloadName}
+                  onClick={handleDownload}
+                >
+                  Unduh PNG {selectedBackground.downloadLabel}
                 </a>
               </div>
 
               <div className="comparison-card">
                 <div className="comparison-labels" aria-hidden="true">
                   <span>Asli</span>
-                  <span>Transparan</span>
+                  <span>{selectedBackground.label}</span>
                 </div>
-                <div className="comparison-frame" style={{ '--comparison': `${comparisonValue}%` } as CSSProperties}>
+                <div
+                  className={`comparison-frame background-${selectedBackground.id}`}
+                  style={
+                    {
+                      '--comparison': `${comparisonValue}%`,
+                      '--result-background': selectedBackground.cssValue
+                    } as CSSProperties
+                  }
+                >
                   <img src={imageState.resultUrl} alt="Hasil foto dengan background transparan" />
                   <div className="comparison-before">
                     <img src={imageState.originalUrl} alt="Foto asli sebelum background dihapus" />
